@@ -24,6 +24,14 @@ const delay = (time) => {
     });
 }
 
+const chunk = (arr, chunkSize) => {
+    let temp = [];
+    for(let i = 0; i < arr.length; i+=chunkSize) {
+        temp.push(arr.slice(i, i+chunkSize));
+    }
+    return temp;
+}
+
 const puppeteerArgs = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -97,12 +105,14 @@ const scrapeStatus = (text) => {
 }
 
 
-const scrapeStatusWithCluster = async(text) => {
+const scrapeStatusWithCluster = async(urls) => {
     const cluster = await Cluster.launch({
         concurrency: Cluster.CONCURRENCY_CONTEXT,
         maxConcurrency: 4,
-        puppeteerOptions: puppeteerArgs,
-        headless: true,
+        puppeteerOptions: {
+            args: puppeteerArgs,
+            headless: true,
+        },
         monitor: true
     });
     const requests = [];
@@ -117,7 +127,7 @@ const scrapeStatusWithCluster = async(text) => {
 
     })
 
-    const urls = Array.from(getURLs(text));
+    // const urls = Array.from(getURLs(text));
     urls.map((url) => cluster.queue(url));
 
     await cluster.idle();
@@ -128,10 +138,17 @@ const scrapeStatusWithCluster = async(text) => {
 
 app.post("/", async (req, res) => {
     const body = req.body;
-    // console.log ("This is the body text: ", body.text);
-    const data = await scrapeStatusWithCluster(body.text);
-    await console.log(data);
-    res.json({
+    // const chunk = 36;
+    // const chunkedArray = [];
+    const urls = Array.from(getURLs(body.text));
+    const parsed = chunk(urls, 36);
+    let data = [];
+    console.log(parsed)
+
+    for(let arr of parsed) {
+        data = [...data, ...await scrapeStatusWithCluster(arr)];
+    }
+    await res.json({
         status: "finished",
         data
     });
